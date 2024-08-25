@@ -1,0 +1,78 @@
+import { EmailProvider, EmailStatus } from './types';
+
+class EmailService {
+    private primaryProvider: EmailProvider;
+    private secondaryProvider: EmailProvider;
+    private sentEmails: Set<string>;
+    private statusLog: EmailStatus[];
+    private rateLimit: number;
+    private rateCounter: number;
+    private resetTime: number;
+    private circuitBreakerOpen: boolean;
+    private failureCount: number;
+
+    constructor(primaryProvider: EmailProvider, secondaryProvider: EmailProvider) {
+        this.primaryProvider = primaryProvider;
+        this.secondaryProvider = secondaryProvider;
+        this.sentEmails = new Set();
+        this.statusLog = [];
+        this.rateLimit = 100; // Example rate limit
+        this.rateCounter = 0;
+        this.resetTime = Date.now() + 60 * 1000; // 1-minute window
+        this.circuitBreakerOpen = false;
+        this.failureCount = 0;
+    }
+
+    async sendEmail(emailId: string, to: string, subject: string, body: string) {
+        if (this.sentEmails.has(emailId)) {
+            return { status: 'duplicate', message: 'Email already sent' };
+        }
+        if (this.circuitBreakerOpen) {
+            return { status: 'error', message: 'Service unavailable' };
+        }
+        if (Date.now() > this.resetTime) {
+            this.rateCounter = 0;
+            this.resetTime = Date.now() + 60 * 1000;
+        }
+        if (this.rateCounter >= this.rateLimit) {
+            return { status: 'error', message: 'Rate limit exceeded' };
+        }
+
+        this.rateCounter++;
+        let success = await this.trySendWithProvider(this.primaryProvider, emailId, to, subject, body);
+        if (!success) {
+            success = await this.trySendWithProvider(this.secondaryProvider, emailId, to, subject, body);
+        }
+
+        if (success) {
+            this.sentEmails.add(emailId);
+            this.statusLog.push({ emailId, status: 'sent', provider: success.provider });
+            return { status: 'success', provider: success.provider };
+        } else {
+            this.failureCount++;
+            if (this.failureCount >= 5) {
+                this.circuitBreakerOpen = true;
+            }
+            this.statusLog.push({ emailId, status: 'failed' });
+            return { status: 'error', message: 'Failed to send email' };
+        }
+    }
+
+    private async trySendWithProvider(provider: EmailProvider, emailId: string, to: string, subject: string, body: string): Promise<{ provider: string } | null> {
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                await provider.send(to, subject, body);
+                return { provider: provider.name };
+            } catch (error) {
+                await this.delay(attempt);
+            }
+        }
+        return null;
+    }
+
+    private delay(attempt: number) {
+        return new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
+}
+
+export default EmailService;
