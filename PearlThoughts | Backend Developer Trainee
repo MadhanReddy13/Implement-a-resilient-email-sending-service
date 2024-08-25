@@ -1,5 +1,4 @@
-import { EmailProvider, EmailStatus } from './types';
-
+import { EmailProvider, EmailStatus }
 class EmailService {
     private primaryProvider: EmailProvider;
     private secondaryProvider: EmailProvider;
@@ -10,7 +9,6 @@ class EmailService {
     private resetTime: number;
     private circuitBreakerOpen: boolean;
     private failureCount: number;
-
     constructor(primaryProvider: EmailProvider, secondaryProvider: EmailProvider) {
         this.primaryProvider = primaryProvider;
         this.secondaryProvider = secondaryProvider;
@@ -22,7 +20,6 @@ class EmailService {
         this.circuitBreakerOpen = false;
         this.failureCount = 0;
     }
-
     async sendEmail(emailId: string, to: string, subject: string, body: string) {
         if (this.sentEmails.has(emailId)) {
             return { status: 'duplicate', message: 'Email already sent' };
@@ -57,7 +54,6 @@ class EmailService {
             return { status: 'error', message: 'Failed to send email' };
         }
     }
-
     private async trySendWithProvider(provider: EmailProvider, emailId: string, to: string, subject: string, body: string): Promise<{ provider: string } | null> {
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
@@ -69,10 +65,8 @@ class EmailService {
         }
         return null;
     }
-
     private delay(attempt: number) {
         return new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
     }
 }
-
 export default EmailService;
